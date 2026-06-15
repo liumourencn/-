@@ -1,0 +1,5 @@
+interface:
+  display_name: HotHook
+  short_description: 完整拆解视频 hook、脚本、数据与复刻方向
+  icon: 🎬
+  color: "#7C3AED"
