@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import re
 import sys
@@ -17,15 +18,42 @@ import time
 from datetime import datetime, timezone
 
 
+WINDOWS_BROWSER_PATHS = (
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+)
+
+
+def default_profile_dir() -> str:
+    """Return the stable profile reused across HotHook runs."""
+    return os.environ.get(
+        "HOTHOOK_PROFILE",
+        str(pathlib.Path.home() / ".codex" / "hothook-browser-profile"),
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Collect HotHook browser evidence")
     parser.add_argument("url", help="YouTube, Douyin, Bilibili, or similar video URL")
     parser.add_argument("--out", default="hothook_evidence", help="Output directory")
-    parser.add_argument("--profile", default=".hothook-browser-profile", help="Persistent browser profile directory")
+    parser.add_argument("--profile", default=default_profile_dir(), help="Persistent browser profile directory")
     parser.add_argument("--headless", action="store_true", help="Run browser headless; not recommended for login")
     parser.add_argument("--wait", type=int, default=20, help="Seconds to wait after page load")
-    parser.add_argument("--channel", default=None, help="Optional browser channel, such as chrome or msedge")
+    parser.add_argument("--browser", default="auto", choices=("auto", "chromium", "chrome", "msedge"), help="Browser to use; auto prefers the local built-in browser")
+    parser.add_argument("--channel", default=None, help="Optional Playwright channel override, such as chrome or msedge")
     return parser.parse_args()
+
+
+def builtin_browser_executable() -> str | None:
+    env_path = os.environ.get("HOTHOOK_BROWSER") or os.environ.get("CHROME_PATH")
+    candidates = [env_path] if env_path else []
+    candidates.extend(WINDOWS_BROWSER_PATHS)
+    for candidate in candidates:
+        if candidate and pathlib.Path(candidate).exists():
+            return candidate
+    return None
 
 
 def _clean_lines(text: str) -> list[str]:
@@ -124,6 +152,67 @@ def extract_visible_video_data(snapshot: dict[str, object], body_text: str) -> d
     return data
 
 
+def launch_context(playwright, args: argparse.Namespace):
+    launch_options = {
+        "user_data_dir": args.profile,
+        "headless": args.headless,
+        "viewport": {"width": 1440, "height": 1000},
+        "locale": "zh-CN",
+    }
+    if args.channel:
+        launch_options["channel"] = args.channel
+    elif args.browser == "chrome":
+        launch_options["channel"] = "chrome"
+    elif args.browser == "msedge":
+        launch_options["channel"] = "msedge"
+    elif args.browser == "auto":
+        executable = builtin_browser_executable()
+        if executable:
+            launch_options["executable_path"] = executable
+
+    try:
+        return playwright.chromium.launch_persistent_context(**launch_options)
+    except Exception:
+        if args.browser != "auto":
+            raise
+        launch_options.pop("executable_path", None)
+        for channel in ("chrome", "msedge"):
+            launch_options["channel"] = channel
+            try:
+                return playwright.chromium.launch_persistent_context(**launch_options)
+            except Exception:
+                continue
+        launch_options.pop("channel", None)
+        return playwright.chromium.launch_persistent_context(**launch_options)
+
+
+def extract_transcript(page) -> list[str]:
+    patterns = (
+        r"Show transcript",
+        r"Transcript",
+        r"显示文字记录",
+        r"显示转录",
+        r"文字记录",
+    )
+    try:
+        page.get_by_text(re.compile(r"more|更多|展开", re.IGNORECASE)).first.click(timeout=2500)
+        time.sleep(1)
+    except Exception:
+        pass
+
+    for pattern in patterns:
+        try:
+            page.get_by_text(re.compile(pattern, re.IGNORECASE)).first.click(timeout=3000)
+            time.sleep(2)
+            lines = page.locator("ytd-transcript-segment-renderer").all_inner_texts()
+            cleaned = [line.strip() for line in lines if line.strip()]
+            if cleaned:
+                return cleaned
+        except Exception:
+            pass
+    return []
+
+
 def main() -> int:
     args = parse_args()
     out_dir = pathlib.Path(args.out)
@@ -137,26 +226,7 @@ def main() -> int:
         return 2
 
     with sync_playwright() as p:
-        launch_options = {
-            "user_data_dir": args.profile,
-            "headless": args.headless,
-            "viewport": {"width": 1440, "height": 1000},
-            "locale": "zh-CN",
-        }
-        if args.channel:
-            launch_options["channel"] = args.channel
-
-        try:
-            context = p.chromium.launch_persistent_context(**launch_options)
-        except Exception:
-            if args.channel:
-                raise
-            launch_options["channel"] = "chrome"
-            try:
-                context = p.chromium.launch_persistent_context(**launch_options)
-            except Exception:
-                launch_options["channel"] = "msedge"
-                context = p.chromium.launch_persistent_context(**launch_options)
+        context = launch_context(p, args)
         page = context.new_page()
         try:
             page.goto(args.url, wait_until="domcontentloaded", timeout=60000)
@@ -195,9 +265,13 @@ def main() -> int:
             "html_lang": html_lang,
             "note": "Visible page evidence only. Login/CAPTCHA/2FA bypass was not attempted.",
         }
+        transcript_lines = extract_transcript(page)
+        snapshot["transcript_line_count"] = len(transcript_lines)
+        snapshot["transcript_evidence"] = bool(transcript_lines)
 
         (out_dir / "page_snapshot.json").write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
         (out_dir / "page_text.txt").write_text(body_text, encoding="utf-8")
+        (out_dir / "transcript.txt").write_text("\n".join(transcript_lines), encoding="utf-8")
         video_data = extract_visible_video_data(snapshot, body_text)
         (out_dir / "video_data.json").write_text(json.dumps(video_data, ensure_ascii=False, indent=2), encoding="utf-8")
         try:

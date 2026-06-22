@@ -1,5 +1,5 @@
 interface:
   display_name: HotHook
-  short_description: 完整拆解视频 hook、脚本、数据与复刻方向
+  short_description: 监控账号新视频，去重后完整播放并生成 HTML 拆解报告
   icon: 🎬
   color: "#7C3AED"

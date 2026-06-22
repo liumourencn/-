@@ -1,0 +1,21 @@
+{
+  "timezone": "Asia/Shanghai",
+  "state_path": "hothook_monitor_state/seen_videos.json",
+  "output_path": "hothook_monitor_state/pending_videos.json",
+  "profile": ".hothook-browser-profile",
+  "browser": "auto",
+  "accounts": [
+    {
+      "name": "example-youtube-channel",
+      "platform": "youtube",
+      "url": "https://www.youtube.com/@example/videos",
+      "max_videos": 12
+    },
+    {
+      "name": "example-douyin-user",
+      "platform": "douyin",
+      "url": "https://www.douyin.com/user/example",
+      "max_videos": 12
+    }
+  ]
+}
