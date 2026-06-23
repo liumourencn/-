@@ -32,6 +32,9 @@ Open the supplied YouTube, Douyin, or Bilibili URL in a real browser session, us
    - Top visible comments when relevant and authorized.
    - Screenshot of the title/cover/player area and timestamped frames while the video plays.
    - Available subtitles/transcript/captions from the page UI when visible.
+   - First 5 seconds hook evidence: one screenshot per second from `00:00` through `00:05`, plus hook text saved as `hook_0_5s_text.json` and `hook_0_5s_text.txt`.
+   - For the first 5 seconds, classify text sources separately: `video_subtitle` for bottom subtitles/spoken-caption text, `sticker_text` for post-production sticker titles, `prompt_card_text` for prompt-card or pasted large text, and `title_card` for full-frame title cards. Do not merge bottom subtitles with sticker or prompt-card text.
+   - Mark hook, reversal, contradiction, or scene-switch copy with `highlight: true` so the report can show those rows in red.
 6. Save raw evidence to a local folder such as `hothook_evidence/`:
    - `page_snapshot.json`
    - `page_text.txt`
@@ -39,7 +42,7 @@ Open the supplied YouTube, Douyin, or Bilibili URL in a real browser session, us
    - optional `transcript.txt`
 7. Play the video from start to end with `scripts/hothook_watch_video_timeline.py --browser auto --require-complete`. Do not use random seeking as proof of full watch.
    - While playback runs, allow normal visible clicks for skip-ad and resume controls; these are evidence-handling actions, not security or ad bypass.
-8. Run the standard HotHook breakdown using the collected evidence and write a single HTML report.
+8. Run the standard HotHook breakdown using the collected evidence and write a single HTML report. Keep screenshots as raw evidence; do not embed a screenshot evidence gallery unless the user explicitly asks.
 
 ## Full-playback workflow
 
@@ -55,8 +58,9 @@ Use this when the user asks for a complete script, complete teardown, or final H
 6. Collect full-playback visual evidence with `scripts/hothook_watch_video_timeline.py --browser auto --require-complete`.
 7. Inspect frames from the beginning, middle, and end before analysis, and verify the manifest says `completed: true`.
 8. Reject a full-playback claim if frames show a login wall, homepage/feed, wrong video, cookie/security prompt, or static blocked screen.
-9. If transcript/audio evidence is unavailable, do not invent a verbatim transcript. Produce a blocked/partial HTML that states what is missing and asks for subtitles, transcript, audio, or a local video file.
-10. For final delivery, create a single HTML file. Embed images in the HTML as data URIs. Use `scripts/generate_single_html_report.py` for single-file HTML when a Markdown report and evidence images are available.
+9. Save first-5-second hook evidence. Capture one screenshot per second from `00:00` through `00:05`; save text as `hook_0_5s_text.json` and `hook_0_5s_text.txt`. Prefer subtitles/ASR for speech and OCR or manually verified visible text for on-screen words. In the final HTML, first-5-second screenshots may be embedded only inside the first-5-second hook module; do not add a generic screenshot evidence gallery by default.
+10. If transcript/audio evidence is unavailable, do not invent a verbatim transcript. In the final HTML, use only a short line such as "未生成完整逐字稿。"; do not explain the cause unless the user asks.
+11. For final delivery, create a single HTML file. Do not embed evidence screenshots by default. Use `scripts/generate_single_html_report.py` for single-file HTML when a Markdown report is available.
 
 ## Evidence hierarchy
 
@@ -102,4 +106,4 @@ If browser automation fails, report what failed briefly, then ask the user for o
 - screenshots,
 - uploaded video file.
 
-Then create a partial HTML report instead of chat-only output, clearly stating that complete teardown requires full-playback and transcript evidence.
+Then create a partial HTML report instead of chat-only output. Keep missing-evidence notes concise and avoid technical explanations unless the user asks.

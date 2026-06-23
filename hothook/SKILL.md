@@ -9,7 +9,7 @@ description: Analyze and deconstruct videos from YouTube, Douyin, Bilibili, or s
 
 Break videos into evidence-based creator insights and reusable scripts. Default to Chinese unless the user requests another language. The final deliverable is always a single `.html` file unless the user explicitly asks for an additional format.
 
-Never claim a full video teardown from only a page snapshot, metadata, chapter summary, or single screenshot. Never call a frame-based reconstruction a verbatim transcript. If transcript, subtitles, or ASR output are unavailable, stop before final analysis and ask the user for subtitles/transcript/audio/video, or explain that only a partial page-evidence HTML can be produced.
+Never claim a full video teardown from only a page snapshot, metadata, chapter summary, or single screenshot. Never call a frame-based reconstruction a verbatim transcript. If transcript, subtitles, or ASR output are unavailable, do not fabricate a transcript. In the final HTML, keep the transcript note concise and do not explain the missing-transcript cause unless the user asks.
 
 ## Evidence Levels
 
@@ -37,8 +37,16 @@ For linked videos in a Codex/browser-capable environment:
    - If transcript evidence cannot be obtained, create a blocked/partial HTML that states what is missing and asks for transcript/subtitles/audio/video.
 6. Collect full-playback visual evidence with `scripts/hothook_watch_video_timeline.py --require-complete`.
 7. Inspect frames from the beginning, middle, and end, and verify `full_playback_manifest.json` has `completed: true`. If frames show a login wall, modal, homepage, wrong video, blocked content, or repeated static screen, do not claim full-playback evidence.
-8. Create contact sheets with `scripts/make_contact_sheets.py`.
-9. Write the analysis as Markdown, then always produce a final single-file `.html` with `scripts/generate_single_html_report.py`, embedding evidence images/contact sheets. Return the HTML path as the primary output.
+8. Capture and save the first 5 seconds as a dedicated hook module:
+   - Save one screenshot per second from `00:00` through `00:05` under `evidence/hook_0_5s_frames/`.
+   - Save hook text as `evidence/hook_0_5s_text.json` and `evidence/hook_0_5s_text.txt`.
+   - Split visible text by source. Use `video_subtitle` for bottom subtitles/spoken-caption text, `sticker_text` for post-production sticker titles, `prompt_card_text` for prompt cards or large pasted text blocks, and `title_card` when the full frame is a title card.
+   - Do not confuse bottom video subtitles with post-production stickers or prompt-card text. Record both when both are visible in the same second.
+   - Mark hook, contradiction, reversal, or scene-switch copy with `highlight: true` so the final HTML can show it in red.
+   - Prefer platform subtitles/transcript or ASR for spoken words. Use OCR or manually verified visible text for stickers, prompt cards, cover words, and title cards.
+   - The final HTML may embed only these first-5-second screenshots inside the first-5-second hook module. Keep other screenshots/contact sheets as raw evidence unless the user explicitly asks.
+9. Keep screenshots/contact sheets as raw evidence files only outside the first-5-second hook module. Do not include a generic video screenshot evidence section or embedded evidence screenshots in the final report unless the user explicitly asks.
+10. Write the analysis as Markdown, then always produce a final single-file `.html` with `scripts/generate_single_html_report.py`. Return the HTML path as the primary output.
 
 ## Daily Account Monitoring
 
@@ -61,15 +69,16 @@ Every full breakdown must include:
 
 1. **数据面板**: platform, URL, author, title, publish time, duration, visible metrics, interaction-rate decision, and data judgment.
 2. **Hook 拆解**: first 3-15 seconds, hook type, stop-scroll mechanism, risk points, and rewrite advice.
-3. **逐字稿**:
+3. **前 5 秒 Hook 原文**: complete available text from 00:00.0 to 00:05.0, split by timestamp and source, using `hook_0_5s_text.json` when available.
+4. **逐字稿**:
    - Use "逐字稿" only when transcript/subtitle/ASR evidence exists.
    - Use timestamped speaker text from beginning to end.
    - Do not invent missing lines.
-   - If transcript evidence is missing, do not fabricate this module. Produce an HTML that states the missing evidence and asks for transcript/subtitle/audio/video, or run ASR if a local media file is available.
-4. **脚本结构**: segment name, timestamp, content summary, narrative function, pacing, and reusable pattern.
-5. **风格标签**: format, content category, emotional tone, editing/visual style, persona/account feel.
-6. **为什么能爆**: 2-3 concrete reasons, each tied to mechanism, video evidence, and reusable lesson.
-7. **改写方向**: 3 actionable directions with platform, account type, new hook, outline, title/cover suggestion, and pitfalls.
+   - If transcript evidence is missing, do not fabricate this module. In the HTML, use only a short line such as "未生成完整逐字稿。"; do not explain why it was unavailable unless the user asks.
+5. **脚本结构**: segment name, timestamp, content summary, narrative function, pacing, and reusable pattern.
+6. **风格标签**: format, content category, emotional tone, editing/visual style, persona/account feel.
+7. **为什么能爆**: 2-3 concrete reasons, each tied to mechanism, video evidence, and reusable lesson.
+8. **改写方向**: 3 actionable directions with platform, account type, new hook, outline, title/cover suggestion, and pitfalls.
 
 ## Browser Rules
 
@@ -153,5 +162,6 @@ node scripts/daily_monitor_accounts.mjs --config config/watch_accounts.json --mo
 - Separate confirmed evidence from inference.
 - Tie every claim to visible metrics, transcript lines, frame evidence, scene choices, comments, or platform conventions.
 - Do not provide long verbatim copyrighted transcripts beyond what the user provided or what is legally/technically appropriate to process for analysis.
-- Final reports must state evidence status: transcript-backed, full-playback-backed, page-evidence-only, or blocked by missing transcript/full-playback evidence.
+- Final reports must state evidence status for playback/page evidence, but do not include a transcript status card when transcript evidence is missing.
+- Final reports must not include a screenshot evidence gallery by default. Keep screenshots as local raw evidence and reference them only if needed.
 - Do not finish a linked-video request with chat-only analysis when the user asked to use this skill. Create and return an HTML file.
